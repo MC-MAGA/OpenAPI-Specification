@@ -13,6 +13,41 @@ const path = require('path');
 const url = require('url');
 
 const hljs = require('highlight.js');
+hljs.registerLanguage('uritemplate', function() {
+    return {
+      case_insensitive: true,
+      contains: [
+          {
+              scope: "attr", 
+              match: /(?<=[{,])[^,}\n\r]+/,
+          }
+      ],
+    }
+  });
+hljs.registerLanguage('uri', function() {
+    return {
+      case_insensitive: true,
+      classNameAliases: {
+          pathsegment: "attr",
+          option: "attr",
+          value: "literal"
+      },
+      contains: [
+          {
+              scope: "pathsegment", 
+              match: /(?<=[/])[^/?#\n\r]+/,
+          },
+          {
+              scope: "option", 
+              match: /(?<=[?&#])[^=?&#\n\r]+/,
+          },
+          {
+              scope: "value",
+              match: /(?<=\=)[^?&#\n\r]+/,
+          }
+      ],
+    }
+  });
 const cheerio = require('cheerio');
 
 let argv = require('yargs')
@@ -36,7 +71,8 @@ const md = require('markdown-it')({
       '</code></pre>';
     }
 
-    return '<pre class="highlight '+lang+'" tabindex="0"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
+    if (lang) console.warn('highlight.js does not support language',lang);
+    return '<pre class="nohighlight" tabindex="0"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
   }
 });
 
@@ -190,7 +226,7 @@ for (let l in lines) {
 
     // remove TOC from older spec versions, respec will generate a new one
     if (line.startsWith('## Table of Contents')) inTOC = true;
-    if (line.startsWith('<!-- /TOC')) inTOC = false;
+    else if (line.startsWith('#')) inTOC = false;
     if (inTOC) line = '';
 
     // special formatting for Definitions section
@@ -209,7 +245,7 @@ for (let l in lines) {
         line = line.replace('<a name="parameterAllowEmptyValue"/>','<span id="parameterAllowEmptyValue"></span>');
     }
 
-    // replace deprecated <a name="..."></a> with <span id="..."></span>
+    // replace deprecated <a name="..."></a> with <span id="..."></span> - needed for older specs
     line = line.replace(/<a name="([^"]+)"><\/a>/g,'<span id="$1"></span>');
 
     line = line.split('\\|').join('&#124;'); // was &brvbar
@@ -271,12 +307,14 @@ for (let l in lines) {
 
     // fix relative links (to examples)
     if (!inCodeBlock && line.indexOf('](../examples/') >= 0) {
+        // links to examples go to learn site, links to yaml files go to wrapper html
         line = line.replace(/\(\.\.\/examples\/([^)]+)\)/g,function(match,group1){
             console.warn("example link",group1);
-            //TODO: group1 = group1.replace('.yaml','.html');
+            group1 = group1.replace('.yaml','.html');
             return `(https://learn.openapis.org/examples/${group1})`;
           })
     } else if (!inCodeBlock && line.indexOf('](../') >= 0) {
+        // links to other sibling files go to github
         const regExp = /\((\.\.[^)]+)\)/g;
         line = line.replace(regExp,function(match,group1){
           console.warn('relative link',group1);
